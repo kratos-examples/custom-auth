@@ -2,27 +2,50 @@ package service
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/go-kratos/kratos/v2/log"
 	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
 	"github.com/yylego/kratos-examples/demo2kratos/internal/biz"
+	"github.com/yylego/kratos-examples/demo2kratos/internal/pkg/dbauth"
+	"github.com/yylego/kratos-static-auth/statickratosauth"
+	"github.com/yylego/must"
 )
 
 type ArticleService struct {
 	pb.UnimplementedArticleServiceServer
 
-	uc *biz.ArticleUsecase
+	uc  *biz.ArticleUsecase
+	log *log.Helper
 }
 
-func NewArticleService(uc *biz.ArticleUsecase) *ArticleService {
-	return &ArticleService{uc: uc}
+func NewArticleService(uc *biz.ArticleUsecase, logger log.Logger) *ArticleService {
+	return &ArticleService{uc: uc, log: log.NewHelper(logger)}
 }
 
 func (s *ArticleService) CreateArticle(ctx context.Context, req *pb.CreateArticleRequest) (*pb.CreateArticleReply, error) {
+	// Extract role name from config-based auth
+	//
+	// 从基于配置的认证中提取角色名
+	roleName, ok := statickratosauth.GetUsername(ctx)
+	must.True(ok)
+	must.Nice(roleName)
+	s.log.WithContext(ctx).Infof("CreateArticle roleName=%s", roleName)
+
+	// Extract user info from database-based auth
+	//
+	// 从基于数据库的认证中提取用户信息
+	authInfo, erk := dbauth.GetAuthInfo(ctx)
+	if erk != nil {
+		return nil, erk
+	}
+	s.log.WithContext(ctx).Infof("CreateArticle userName=%s", authInfo.Username)
+
 	v, ebz := s.uc.CreateArticle(ctx, nil)
 	if ebz != nil {
 		return nil, ebz.Erk
 	}
-	return &pb.CreateArticleReply{Article: &pb.ArticleInfo{Id: v.ID, Title: v.Title, Content: v.Content, StudentId: v.StudentID}}, nil
+	return &pb.CreateArticleReply{Article: &pb.ArticleInfo{Id: v.ID, Title: fmt.Sprintf("%s (role=%s, user=%s)", v.Title, roleName, authInfo.Username), Content: v.Content, StudentId: v.StudentID}}, nil
 }
 
 func (s *ArticleService) UpdateArticle(ctx context.Context, req *pb.UpdateArticleRequest) (*pb.UpdateArticleReply, error) {

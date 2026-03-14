@@ -1,3 +1,6 @@
+// Package server provides HTTP and gRPC with two-step auth middleware
+//
+// Package server 提供带双层认证中间件的 HTTP 和 gRPC 服务
 package server
 
 import (
@@ -6,13 +9,23 @@ import (
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
 	"github.com/yylego/kratos-examples/demo2kratos/internal/conf"
+	"github.com/yylego/kratos-examples/demo2kratos/internal/data"
 	"github.com/yylego/kratos-examples/demo2kratos/internal/service"
 )
 
-func NewGRPCServer(c *conf.Server, article *service.ArticleService, logger log.Logger) *grpc.Server {
+// NewGRPCServer creates gRPC with two-step auth middleware
+// Step 1: Role-based auth from config (NewRoleMiddleware)
+// Step 2: User-based auth from database (NewUserMiddleware)
+//
+// NewGRPCServer 创建带双层认证中间件的 gRPC 服务
+// 第一层：基于配置的角色认证（NewRoleMiddleware）
+// 第二层：基于数据库的用户认证（NewUserMiddleware）
+func NewGRPCServer(c *conf.Server, dataData *data.Data, article *service.ArticleService, logger log.Logger) *grpc.Server {
 	var opts = []grpc.ServerOption{
 		grpc.Middleware(
 			recovery.Recovery(),
+			NewRoleMiddleware(c, logger),
+			NewUserMiddleware(dataData, logger),
 		),
 	}
 	if c.Grpc.Network != "" {
