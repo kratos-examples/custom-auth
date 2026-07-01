@@ -5,10 +5,10 @@ Code differences compared to source project.
 ## cmd/demo2kratos/wire_gen.go (+3 -3)
 
 ```diff
-@@ -24,9 +24,9 @@
+@@ -33,9 +33,9 @@
+ 		cleanup()
  		return nil, nil, err
  	}
- 	articleUsecase := biz.NewArticleUsecase(dataData, logger)
 -	articleService := service.NewArticleService(articleUsecase)
 -	grpcServer := server.NewGRPCServer(confServer, articleService, logger)
 -	httpServer := server.NewHTTPServer(confServer, articleService, logger)
@@ -32,7 +32,7 @@ Code differences compared to source project.
 +    guestToken: "61d1a2e27b734d959670112389f7b2c2"
  data:
    database:
-     driver: sqlite3
+     driver: postgres
 ```
 
 ## internal/conf/conf.pb.go (+87 -17)
@@ -240,24 +240,23 @@ Code differences compared to source project.
  message Data {
 ```
 
-## internal/data/data.go (+62 -5)
+## internal/data/data.go (+59 -10)
 
 ```diff
-@@ -1,27 +1,84 @@
- package data
+@@ -2,34 +2,83 @@
  
  import (
+ 	"log/slog"
 +	"time"
-+
- 	"github.com/go-kratos/kratos/v2/log"
+ 
  	"github.com/google/wire"
  	"github.com/yylego/kratos-examples/demo2kratos/internal/conf"
 +	"github.com/yylego/kratos-examples/demo2kratos/internal/pkg/models"
  	"github.com/yylego/must"
  	"github.com/yylego/rese"
- 	"gorm.io/driver/sqlite"
+ 	"gorm.io/driver/postgres"
  	"gorm.io/gorm"
-+	loggergorm "gorm.io/gorm/logger"
++	"gorm.io/gorm/clause"
  )
  
  var ProviderSet = wire.NewSet(NewData)
@@ -267,23 +266,26 @@ Code differences compared to source project.
 +	db *gorm.DB // GORM database connection instance // GORM 数据库连接实例
  }
  
- func NewData(c *conf.Data, logger log.Logger) (*Data, func(), error) {
--	must.Same(c.Database.Driver, "sqlite3")
--	db := rese.P1(gorm.Open(sqlite.Open(c.Database.Source), &gorm.Config{}))
-+	dsn := must.Nice(c.Database.Source)
-+	db := rese.P1(gorm.Open(sqlite.Open(dsn), &gorm.Config{
-+		Logger: loggergorm.Default.LogMode(loggergorm.Info),
-+	}))
+-// DB exposes the underlying gorm handle so the biz code can run true queries.
+-//
+-// DB 暴露底层 gorm 句柄，供 biz 层执行真实的数据库读写
+-func (d *Data) DB() *gorm.DB {
+-	return d.db
+-}
+-
+ func NewData(c *conf.Data, logger *slog.Logger) (*Data, func(), error) {
+ 	must.Same(c.Database.Driver, "postgres")
+ 	db := rese.P1(gorm.Open(postgres.Open(c.Database.Source), &gorm.Config{}))
 +
-+	must.Done(db.AutoMigrate(&models.Admin{}, &models.Token{}))
++	must.Done(db.AutoMigrate(&models.Admin{}, &models.Token{})) // Auto migrate database schema // 自动迁移数据库表结构
 +
-+	mockAdmin1(db)
-+	mockAdmin2(db)
++	mockAdmin1(db) // Create mock admin1 and token data // 创建模拟管理员1及其令牌数据
++	mockAdmin2(db) // Create mock admin2 and token data // 创建模拟管理员2及其令牌数据
 +
  	cleanup := func() {
- 		log.NewHelper(logger).Info("closing the data resources")
+ 		logger.Info("closing the data resources")
 -		_ = rese.P1(db.DB()).Close()
-+		must.Done(rese.P1(db.DB()).Close())
++		must.Done(rese.P1(db.DB()).Close()) // Close database connection on cleanup // 清理时关闭数据库连接
  	}
 -	return &Data{db: db}, cleanup, nil
 +	return &Data{
@@ -298,21 +300,23 @@ Code differences compared to source project.
 +	return d.db
 +}
 +
-+// mockAdmin1 creates test admin with username "abc" and access token
++// mockAdmin1 creates test admin with username "abc" and access token.
++// OnConflict UpdateAll keeps it idempotent across restarts and refreshes the token expiry.
 +//
 +// mockAdmin1 创建测试管理员（用户名 "abc"）及其访问令牌
++// OnConflict UpdateAll 让重复启动幂等，并刷新令牌过期时间
 +func mockAdmin1(db *gorm.DB) {
-+	must.Done(db.Create(&models.Admin{
++	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Admin{
 +		Username: "abc",
 +		Password: "123",
 +		Mailbox:  "",
 +		Status:   0,
 +	}).Error)
-+	must.Done(db.Create(&models.Token{
++	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Token{
 +		AdminID:   1,
 +		Token:     "95d9fda7f675444d9acc3c8225dbf7de",
 +		Type:      "access",
-+		ExpiresAt: time.Now().UTC().Add(30 * time.Minute),
++		ExpiresAt: time.Now().UTC().Add(30 * time.Minute), // Token expires in 30 minutes // 令牌30分钟后过期
 +	}).Error)
 +}
 +
@@ -320,17 +324,17 @@ Code differences compared to source project.
 +//
 +// mockAdmin2 创建测试管理员（用户名 "xyz"）及其访问令牌
 +func mockAdmin2(db *gorm.DB) {
-+	must.Done(db.Create(&models.Admin{
++	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Admin{
 +		Username: "xyz",
 +		Password: "456",
 +		Mailbox:  "",
 +		Status:   0,
 +	}).Error)
-+	must.Done(db.Create(&models.Token{
++	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Token{
 +		AdminID:   2,
 +		Token:     "46421ed7de4a4fcc888ff84541defbc3",
 +		Type:      "access",
-+		ExpiresAt: time.Now().UTC().Add(30 * time.Minute),
++		ExpiresAt: time.Now().UTC().Add(30 * time.Minute), // Token expires in 30 minutes // 令牌30分钟后过期
 +	}).Error)
  }
 ```
@@ -348,7 +352,7 @@ Code differences compared to source project.
 +	"context"
 +	"time"
 +
-+	"github.com/go-kratos/kratos/v2/errors"
++	"github.com/go-kratos/kratos/v3/errors"
 +	"github.com/yylego/gormrepo"
 +	"github.com/yylego/gormrepo/gormclass"
 +	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
@@ -619,25 +623,28 @@ Code differences compared to source project.
 +}
 ```
 
-## internal/server/grpc.go (+14 -1)
+## internal/server/grpc.go (+15 -3)
 
 ```diff
-@@ -1,3 +1,6 @@
+@@ -1,19 +1,31 @@
 +// Package server provides HTTP and gRPC with two-step auth middleware
 +//
 +// Package server 提供带双层认证中间件的 HTTP 和 gRPC 服务
  package server
  
  import (
-@@ -6,13 +9,23 @@
- 	"github.com/go-kratos/kratos/v2/transport/grpc"
+-	"log/slog"
+-
+ 	"github.com/go-kratos/kratos/v3/middleware/recovery"
+ 	"github.com/go-kratos/kratos/v3/transport/grpc"
  	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
  	"github.com/yylego/kratos-examples/demo2kratos/internal/conf"
 +	"github.com/yylego/kratos-examples/demo2kratos/internal/data"
  	"github.com/yylego/kratos-examples/demo2kratos/internal/service"
++	"log/slog"
  )
  
--func NewGRPCServer(c *conf.Server, article *service.ArticleService, logger log.Logger) *grpc.Server {
+-func NewGRPCServer(c *conf.Server, article *service.ArticleService, logger *slog.Logger) *grpc.Server {
 +// NewGRPCServer creates gRPC with two-step auth middleware
 +// Step 1: Role-based auth from config (NewRoleMiddleware)
 +// Step 2: User-based auth from database (NewUserMiddleware)
@@ -645,7 +652,7 @@ Code differences compared to source project.
 +// NewGRPCServer 创建带双层认证中间件的 gRPC 服务
 +// 第一层：基于配置的角色认证（NewRoleMiddleware）
 +// 第二层：基于数据库的用户认证（NewUserMiddleware）
-+func NewGRPCServer(c *conf.Server, dataData *data.Data, article *service.ArticleService, logger log.Logger) *grpc.Server {
++func NewGRPCServer(c *conf.Server, dataData *data.Data, article *service.ArticleService, logger *slog.Logger) *grpc.Server {
  	var opts = []grpc.ServerOption{
  		grpc.Middleware(
  			recovery.Recovery(),
@@ -656,23 +663,23 @@ Code differences compared to source project.
  	if c.Grpc.Network != "" {
 ```
 
-## internal/server/http.go (+75 -1)
+## internal/server/http.go (+75 -2)
 
 ```diff
-@@ -1,18 +1,33 @@
+@@ -1,19 +1,33 @@
 +// Package server provides HTTP and gRPC with two-step auth middleware
 +//
 +// Package server 提供带双层认证中间件的 HTTP 和 gRPC 服务
  package server
  
  import (
+-	"log/slog"
 +	"context"
-+
-+	"github.com/go-kratos/kratos/v2/errors"
- 	"github.com/go-kratos/kratos/v2/log"
-+	"github.com/go-kratos/kratos/v2/middleware"
- 	"github.com/go-kratos/kratos/v2/middleware/recovery"
- 	"github.com/go-kratos/kratos/v2/transport/http"
+ 
++	"github.com/go-kratos/kratos/v3/errors"
++	"github.com/go-kratos/kratos/v3/middleware"
+ 	"github.com/go-kratos/kratos/v3/middleware/recovery"
+ 	"github.com/go-kratos/kratos/v3/transport/http"
 +	"github.com/yylego/kratos-auth/authkratos"
 +	"github.com/yylego/kratos-custom-auth/customkratosauth"
  	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
@@ -682,10 +689,11 @@ Code differences compared to source project.
  	"github.com/yylego/kratos-examples/demo2kratos/internal/service"
 +	"github.com/yylego/kratos-static-auth/statickratosauth"
 +	"github.com/yylego/must"
++	"log/slog"
  )
  
--func NewHTTPServer(c *conf.Server, article *service.ArticleService, logger log.Logger) *http.Server {
-+func NewHTTPServer(c *conf.Server, dataData *data.Data, article *service.ArticleService, logger log.Logger) *http.Server {
+-func NewHTTPServer(c *conf.Server, article *service.ArticleService, logger *slog.Logger) *http.Server {
++func NewHTTPServer(c *conf.Server, dataData *data.Data, article *service.ArticleService, logger *slog.Logger) *http.Server {
  	var opts = []http.ServerOption{
  		http.Middleware(
  			recovery.Recovery(),
@@ -694,7 +702,7 @@ Code differences compared to source project.
  		),
  	}
  	if c.Http.Network != "" {
-@@ -27,4 +42,63 @@
+@@ -28,4 +42,63 @@
  	srv := http.NewServer(opts...)
  	pb.RegisterArticleServiceHTTPServer(srv, article)
  	return srv
@@ -715,7 +723,7 @@ Code differences compared to source project.
 +// NewRoleMiddleware creates auth middleware with token validation and route scope
 +//
 +// NewRoleMiddleware 创建认证中间件，进行令牌验证和路由范围控制
-+func NewRoleMiddleware(c *conf.Server, logger log.Logger) middleware.Middleware {
++func NewRoleMiddleware(c *conf.Server, logger *slog.Logger) middleware.Middleware {
 +	routeScope := authkratos.NewInclude(
 +		pb.OperationArticleServiceCreateArticle,
 +		pb.OperationArticleServiceUpdateArticle,
@@ -737,7 +745,7 @@ Code differences compared to source project.
 +// NewUserMiddleware creates user auth middleware with database token validation
 +//
 +// NewUserMiddleware 创建用户认证中间件，通过数据库验证令牌
-+func NewUserMiddleware(dataData *data.Data, logger log.Logger) middleware.Middleware {
++func NewUserMiddleware(dataData *data.Data, logger *slog.Logger) middleware.Middleware {
 +	routeScope := authkratos.NewInclude(
 +		pb.OperationArticleServiceCreateArticle,
 +		pb.OperationArticleServiceUpdateArticle,
@@ -760,16 +768,16 @@ Code differences compared to source project.
  }
 ```
 
-## internal/service/article.go (+27 -4)
+## internal/service/article.go (+25 -4)
 
 ```diff
-@@ -2,27 +2,50 @@
+@@ -2,22 +2,43 @@
  
  import (
  	"context"
 +	"fmt"
++	"log/slog"
  
-+	"github.com/go-kratos/kratos/v2/log"
  	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
  	"github.com/yylego/kratos-examples/demo2kratos/internal/biz"
 +	"github.com/yylego/kratos-examples/demo2kratos/internal/pkg/dbauth"
@@ -782,34 +790,35 @@ Code differences compared to source project.
  
 -	uc *biz.ArticleUsecase
 +	uc  *biz.ArticleUsecase
-+	log *log.Helper
++	log *slog.Logger
  }
  
 -func NewArticleService(uc *biz.ArticleUsecase) *ArticleService {
 -	return &ArticleService{uc: uc}
-+func NewArticleService(uc *biz.ArticleUsecase, logger log.Logger) *ArticleService {
-+	return &ArticleService{uc: uc, log: log.NewHelper(logger)}
++func NewArticleService(uc *biz.ArticleUsecase, logger *slog.Logger) *ArticleService {
++	return &ArticleService{uc: uc, log: logger}
  }
  
  func (s *ArticleService) CreateArticle(ctx context.Context, req *pb.CreateArticleRequest) (*pb.CreateArticleReply, error) {
 +	// Extract role name from config-based auth
-+	//
 +	// 从基于配置的认证中提取角色名
 +	roleName, ok := statickratosauth.GetUsername(ctx)
 +	must.True(ok)
 +	must.Nice(roleName)
-+	s.log.WithContext(ctx).Infof("CreateArticle roleName=%s", roleName)
++	s.log.InfoContext(ctx, "CreateArticle", "roleName", roleName)
 +
 +	// Extract user info from database-based auth
-+	//
 +	// 从基于数据库的认证中提取用户信息
 +	authInfo, erk := dbauth.GetAuthInfo(ctx)
 +	if erk != nil {
 +		return nil, erk
 +	}
-+	s.log.WithContext(ctx).Infof("CreateArticle userName=%s", authInfo.Username)
++	s.log.InfoContext(ctx, "CreateArticle", "userName", authInfo.Username)
 +
- 	v, ebz := s.uc.CreateArticle(ctx, nil)
+ 	if req.Title == "" {
+ 		return nil, pb.ErrorBadParam("TITLE IS REQUIRED")
+ 	}
+@@ -32,7 +53,7 @@
  	if ebz != nil {
  		return nil, ebz.Erk
  	}

@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/go-kratos/kratos/v2/errors"
+	"github.com/go-kratos/kratos/v3/errors"
 	"github.com/yylego/gormrepo"
 	"github.com/yylego/gormrepo/gormclass"
 	pb "github.com/yylego/kratos-examples/demo1kratos/api/student"

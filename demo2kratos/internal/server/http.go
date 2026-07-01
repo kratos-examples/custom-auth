@@ -6,11 +6,10 @@ package server
 import (
 	"context"
 
-	"github.com/go-kratos/kratos/v2/errors"
-	"github.com/go-kratos/kratos/v2/log"
-	"github.com/go-kratos/kratos/v2/middleware"
-	"github.com/go-kratos/kratos/v2/middleware/recovery"
-	"github.com/go-kratos/kratos/v2/transport/http"
+	"github.com/go-kratos/kratos/v3/errors"
+	"github.com/go-kratos/kratos/v3/middleware"
+	"github.com/go-kratos/kratos/v3/middleware/recovery"
+	"github.com/go-kratos/kratos/v3/transport/http"
 	"github.com/yylego/kratos-auth/authkratos"
 	"github.com/yylego/kratos-custom-auth/customkratosauth"
 	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
@@ -20,9 +19,10 @@ import (
 	"github.com/yylego/kratos-examples/demo2kratos/internal/service"
 	"github.com/yylego/kratos-static-auth/statickratosauth"
 	"github.com/yylego/must"
+	"log/slog"
 )
 
-func NewHTTPServer(c *conf.Server, dataData *data.Data, article *service.ArticleService, logger log.Logger) *http.Server {
+func NewHTTPServer(c *conf.Server, dataData *data.Data, article *service.ArticleService, logger *slog.Logger) *http.Server {
 	var opts = []http.ServerOption{
 		http.Middleware(
 			recovery.Recovery(),
@@ -59,7 +59,7 @@ curl --location 'http://127.0.0.1:8002/v1/articles' --header 'Authorization: c98
 // NewRoleMiddleware creates auth middleware with token validation and route scope
 //
 // NewRoleMiddleware 创建认证中间件，进行令牌验证和路由范围控制
-func NewRoleMiddleware(c *conf.Server, logger log.Logger) middleware.Middleware {
+func NewRoleMiddleware(c *conf.Server, logger *slog.Logger) middleware.Middleware {
 	routeScope := authkratos.NewInclude(
 		pb.OperationArticleServiceCreateArticle,
 		pb.OperationArticleServiceUpdateArticle,
@@ -81,7 +81,7 @@ func NewRoleMiddleware(c *conf.Server, logger log.Logger) middleware.Middleware 
 // NewUserMiddleware creates user auth middleware with database token validation
 //
 // NewUserMiddleware 创建用户认证中间件，通过数据库验证令牌
-func NewUserMiddleware(dataData *data.Data, logger log.Logger) middleware.Middleware {
+func NewUserMiddleware(dataData *data.Data, logger *slog.Logger) middleware.Middleware {
 	routeScope := authkratos.NewInclude(
 		pb.OperationArticleServiceCreateArticle,
 		pb.OperationArticleServiceUpdateArticle,

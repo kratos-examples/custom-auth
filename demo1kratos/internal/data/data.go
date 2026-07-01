@@ -1,17 +1,17 @@
 package data
 
 import (
+	"log/slog"
 	"time"
 
-	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/wire"
 	"github.com/yylego/kratos-examples/demo1kratos/internal/conf"
 	"github.com/yylego/kratos-examples/demo1kratos/internal/pkg/models"
 	"github.com/yylego/must"
 	"github.com/yylego/rese"
-	"gorm.io/driver/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	loggergorm "gorm.io/gorm/logger"
+	"gorm.io/gorm/clause"
 )
 
 var ProviderSet = wire.NewSet(NewData)
@@ -20,11 +20,9 @@ type Data struct {
 	db *gorm.DB // GORM database connection instance // GORM 数据库连接实例
 }
 
-func NewData(c *conf.Data, logger log.Logger) (*Data, func(), error) {
-	dsn := must.Nice(c.Database.Source)                     // Get database DSN from config // 从配置获取数据库DSN
-	db := rese.P1(gorm.Open(sqlite.Open(dsn), &gorm.Config{ // Open SQLite database connection // 打开SQLite数据库连接
-		Logger: loggergorm.Default.LogMode(loggergorm.Info), // Enable GORM info logging // 启用GORM信息日志
-	}))
+func NewData(c *conf.Data, logger *slog.Logger) (*Data, func(), error) {
+	must.Same(c.Database.Driver, "postgres")
+	db := rese.P1(gorm.Open(postgres.Open(c.Database.Source), &gorm.Config{}))
 
 	must.Done(db.AutoMigrate(&models.Admin{}, &models.Token{})) // Auto migrate database schema // 自动迁移数据库表结构
 
@@ -32,7 +30,7 @@ func NewData(c *conf.Data, logger log.Logger) (*Data, func(), error) {
 	mockAdmin2(db) // Create mock admin2 and token data // 创建模拟管理员2及其令牌数据
 
 	cleanup := func() {
-		log.NewHelper(logger).Info("closing the data resources")
+		logger.Info("closing the data resources")
 		must.Done(rese.P1(db.DB()).Close()) // Close database connection on cleanup // 清理时关闭数据库连接
 	}
 	return &Data{
@@ -47,17 +45,19 @@ func (d *Data) DB() *gorm.DB {
 	return d.db
 }
 
-// mockAdmin1 creates test admin with username "abc" and access token
+// mockAdmin1 creates test admin with username "abc" and access token.
+// OnConflict UpdateAll keeps it idempotent across restarts and refreshes the token expiry.
 //
 // mockAdmin1 创建测试管理员（用户名 "abc"）及其访问令牌
+// OnConflict UpdateAll 让重复启动幂等，并刷新令牌过期时间
 func mockAdmin1(db *gorm.DB) {
-	must.Done(db.Create(&models.Admin{
+	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Admin{
 		Username: "abc",
 		Password: "123",
 		Mailbox:  "",
 		Status:   0,
 	}).Error)
-	must.Done(db.Create(&models.Token{
+	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Token{
 		AdminID:   1,
 		Token:     "95d9fda7f675444d9acc3c8225dbf7de",
 		Type:      "access",
@@ -69,13 +69,13 @@ func mockAdmin1(db *gorm.DB) {
 //
 // mockAdmin2 创建测试管理员（用户名 "xyz"）及其访问令牌
 func mockAdmin2(db *gorm.DB) {
-	must.Done(db.Create(&models.Admin{
+	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Admin{
 		Username: "xyz",
 		Password: "456",
 		Mailbox:  "",
 		Status:   0,
 	}).Error)
-	must.Done(db.Create(&models.Token{
+	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Token{
 		AdminID:   2,
 		Token:     "46421ed7de4a4fcc888ff84541defbc3",
 		Type:      "access",
