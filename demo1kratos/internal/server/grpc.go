@@ -5,6 +5,7 @@ package server
 
 import (
 	"github.com/go-kratos/kratos/v3/middleware/recovery"
+	"github.com/go-kratos/kratos/v3/middleware/validate"
 	"github.com/go-kratos/kratos/v3/transport/grpc"
 	pb "github.com/yylego/kratos-examples/demo1kratos/api/student"
 	"github.com/yylego/kratos-examples/demo1kratos/internal/conf"
@@ -26,6 +27,7 @@ func NewGRPCServer(c *conf.Server, dataData *data.Data, student *service.Student
 			recovery.Recovery(),
 			NewRoleMiddleware(c, logger),        // Role-based auth from config // 基于配置的角色认证
 			NewUserMiddleware(dataData, logger), // User-based auth from database // 基于数据库的用户认证
+			validate.Validator(validateRequiredFields),
 		),
 	}
 	if c.Grpc.Network != "" {

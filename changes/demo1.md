@@ -5,7 +5,7 @@ Code differences compared to source project.
 ## cmd/demo1kratos/wire_gen.go (+3 -3)
 
 ```diff
-@@ -33,9 +33,9 @@
+@@ -29,9 +29,9 @@
  		cleanup()
  		return nil, nil, err
  	}
@@ -636,7 +636,7 @@ Code differences compared to source project.
 ## internal/server/grpc.go (+15 -3)
 
 ```diff
-@@ -1,19 +1,31 @@
+@@ -1,20 +1,32 @@
 +// Package server provides HTTP and gRPC with two-step auth middleware
 +//
 +// Package server 提供带双层认证中间件的 HTTP 和 gRPC 服务
@@ -646,6 +646,7 @@ Code differences compared to source project.
 -	"log/slog"
 -
  	"github.com/go-kratos/kratos/v3/middleware/recovery"
+ 	"github.com/go-kratos/kratos/v3/middleware/validate"
  	"github.com/go-kratos/kratos/v3/transport/grpc"
  	pb "github.com/yylego/kratos-examples/demo1kratos/api/student"
  	"github.com/yylego/kratos-examples/demo1kratos/internal/conf"
@@ -668,15 +669,15 @@ Code differences compared to source project.
  			recovery.Recovery(),
 +			NewRoleMiddleware(c, logger),        // Role-based auth from config // 基于配置的角色认证
 +			NewUserMiddleware(dataData, logger), // User-based auth from database // 基于数据库的用户认证
+ 			validate.Validator(validateRequiredFields),
  		),
  	}
- 	if c.Grpc.Network != "" {
 ```
 
 ## internal/server/http.go (+79 -2)
 
 ```diff
-@@ -1,19 +1,33 @@
+@@ -1,20 +1,34 @@
 +// Package server provides HTTP and gRPC with two-step auth middleware
 +//
 +// Package server 提供带双层认证中间件的 HTTP 和 gRPC 服务
@@ -689,6 +690,7 @@ Code differences compared to source project.
 +	"github.com/go-kratos/kratos/v3/errors"
 +	"github.com/go-kratos/kratos/v3/middleware"
  	"github.com/go-kratos/kratos/v3/middleware/recovery"
+ 	"github.com/go-kratos/kratos/v3/middleware/validate"
  	"github.com/go-kratos/kratos/v3/transport/http"
 +	"github.com/yylego/kratos-auth/authkratos"
 +	"github.com/yylego/kratos-custom-auth/customkratosauth"
@@ -709,10 +711,10 @@ Code differences compared to source project.
  			recovery.Recovery(),
 +			NewRoleMiddleware(c, logger),        // Role-based auth from config // 基于配置的角色认证
 +			NewUserMiddleware(dataData, logger), // User-based auth from database // 基于数据库的用户认证
+ 			validate.Validator(validateRequiredFields),
  		),
  	}
- 	if c.Http.Network != "" {
-@@ -28,4 +42,67 @@
+@@ -30,4 +44,67 @@
  	srv := http.NewServer(opts...)
  	pb.RegisterStudentServiceHTTPServer(srv, student)
  	return srv

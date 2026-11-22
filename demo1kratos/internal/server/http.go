@@ -9,6 +9,7 @@ import (
 	"github.com/go-kratos/kratos/v3/errors"
 	"github.com/go-kratos/kratos/v3/middleware"
 	"github.com/go-kratos/kratos/v3/middleware/recovery"
+	"github.com/go-kratos/kratos/v3/middleware/validate"
 	"github.com/go-kratos/kratos/v3/transport/http"
 	"github.com/yylego/kratos-auth/authkratos"
 	"github.com/yylego/kratos-custom-auth/customkratosauth"
@@ -28,6 +29,7 @@ func NewHTTPServer(c *conf.Server, dataData *data.Data, student *service.Student
 			recovery.Recovery(),
 			NewRoleMiddleware(c, logger),        // Role-based auth from config // 基于配置的角色认证
 			NewUserMiddleware(dataData, logger), // User-based auth from database // 基于数据库的用户认证
+			validate.Validator(validateRequiredFields),
 		),
 	}
 	if c.Http.Network != "" {

@@ -5,6 +5,7 @@ package server
 
 import (
 	"github.com/go-kratos/kratos/v3/middleware/recovery"
+	"github.com/go-kratos/kratos/v3/middleware/validate"
 	"github.com/go-kratos/kratos/v3/transport/grpc"
 	pb "github.com/yylego/kratos-examples/demo2kratos/api/article"
 	"github.com/yylego/kratos-examples/demo2kratos/internal/conf"
@@ -26,6 +27,7 @@ func NewGRPCServer(c *conf.Server, dataData *data.Data, article *service.Article
 			recovery.Recovery(),
 			NewRoleMiddleware(c, logger),
 			NewUserMiddleware(dataData, logger),
+			validate.Validator(validateRequiredFields),
 		),
 	}
 	if c.Grpc.Network != "" {
