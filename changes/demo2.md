@@ -240,10 +240,10 @@ Code differences compared to source project.
  message Data {
 ```
 
-## internal/data/data.go (+59 -10)
+## internal/data/data.go (+61 -10)
 
 ```diff
-@@ -2,34 +2,83 @@
+@@ -2,34 +2,85 @@
  
  import (
  	"log/slog"
@@ -285,7 +285,7 @@ Code differences compared to source project.
  	cleanup := func() {
  		logger.Info("closing the data resources")
 -		_ = rese.P1(db.DB()).Close()
-+		must.Done(rese.P1(db.DB()).Close()) // Close database connection on cleanup // 清理时关闭数据库连接
++		_ = rese.P1(db.DB()).Close() // Close database connection on cleanup // 清理时关闭数据库连接
  	}
 -	return &Data{db: db}, cleanup, nil
 +	return &Data{
@@ -306,14 +306,15 @@ Code differences compared to source project.
 +// mockAdmin1 创建测试管理员（用户名 "abc"）及其访问令牌
 +// OnConflict UpdateAll 让重复启动幂等，并刷新令牌过期时间
 +func mockAdmin1(db *gorm.DB) {
-+	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Admin{
++	admin := &models.Admin{
 +		Username: "abc",
 +		Password: "123",
 +		Mailbox:  "",
 +		Status:   0,
-+	}).Error)
-+	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Token{
-+		AdminID:   1,
++	}
++	must.Done(db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "username"}}, UpdateAll: true}).Create(admin).Error)
++	must.Done(db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "token"}}, UpdateAll: true}).Create(&models.Token{
++		AdminID:   admin.ID,
 +		Token:     "95d9fda7f675444d9acc3c8225dbf7de",
 +		Type:      "access",
 +		ExpiresAt: time.Now().UTC().Add(30 * time.Minute), // Token expires in 30 minutes // 令牌30分钟后过期
@@ -324,14 +325,15 @@ Code differences compared to source project.
 +//
 +// mockAdmin2 创建测试管理员（用户名 "xyz"）及其访问令牌
 +func mockAdmin2(db *gorm.DB) {
-+	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Admin{
++	admin := &models.Admin{
 +		Username: "xyz",
 +		Password: "456",
 +		Mailbox:  "",
 +		Status:   0,
-+	}).Error)
-+	must.Done(db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&models.Token{
-+		AdminID:   2,
++	}
++	must.Done(db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "username"}}, UpdateAll: true}).Create(admin).Error)
++	must.Done(db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "token"}}, UpdateAll: true}).Create(&models.Token{
++		AdminID:   admin.ID,
 +		Token:     "46421ed7de4a4fcc888ff84541defbc3",
 +		Type:      "access",
 +		ExpiresAt: time.Now().UTC().Add(30 * time.Minute), // Token expires in 30 minutes // 令牌30分钟后过期
