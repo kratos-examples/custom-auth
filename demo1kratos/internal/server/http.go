@@ -54,8 +54,8 @@ func NewHTTPServer(c *conf.Server, dataData *data.Data, student *service.Student
 // Authorization: 来自配置文件的角色令牌（admin/guest）
 // AdminToken: 来自数据库的用户令牌（具体哪个管理员）
 /*
-curl --location 'http://127.0.0.1:8001/v1/students' --header 'Authorization: 63a16b29e5bc4a28a880de1b2e707cc6' --header 'AdminToken: 95d9fda7f675444d9acc3c8225dbf7de'
-curl --location 'http://127.0.0.1:8001/v1/students' --header 'Authorization: 63a16b29e5bc4a28a880de1b2e707cc6' --header 'AdminToken: 46421ed7de4a4fcc888ff84541defbc3'
+curl --location 'http://127.0.0.1:8001/students?page=1&page_size=1' --header 'Authorization: 63a16b29e5bc4a28a880de1b2e707cc6' --header 'AdminToken: 95d9fda7f675444d9acc3c8225dbf7de'
+curl --location 'http://127.0.0.1:8001/students?page=1&page_size=1' --header 'Authorization: 63a16b29e5bc4a28a880de1b2e707cc6' --header 'AdminToken: 46421ed7de4a4fcc888ff84541defbc3'
 */
 
 // NewRoleMiddleware creates auth middleware with token validation and route scope
@@ -77,8 +77,7 @@ func NewRoleMiddleware(c *conf.Server, logger *slog.Logger) middleware.Middlewar
 	}
 	authConfig := statickratosauth.NewConfig(routeScope, authTokens).
 		WithFieldName("Authorization").
-		WithSimpleEnable(). // Enable simple token type // 启用简单令牌类型
-		WithDebugMode(true) // Enable debug mode to log auth process // 启用调试模式记录认证过程
+		WithSimpleEnable()
 	return statickratosauth.NewMiddleware(authConfig, logger)
 }
 
@@ -104,7 +103,10 @@ func NewUserMiddleware(dataData *data.Data, logger *slog.Logger) middleware.Midd
 		return ctx, nil
 	}
 	authConfig := customkratosauth.NewConfig(routeScope, checkAuthFunction).
-		WithFieldName("AdminToken"). // Set token field name in request header // 设置请求头中的令牌字段名
-		WithDebugMode(true)          // Enable debug mode to log auth process // 启用调试模式记录认证过程
+		WithFieldName("AdminToken")
+	authConfig.WithMissingErk(func(ctx context.Context) *errors.Error {
+		logger.InfoContext(ctx, "missing auth token", "field", authConfig.FieldName())
+		return errors.Unauthorized("TOKEN_NOT_EXIST", "token not exist")
+	})
 	return customkratosauth.NewMiddleware(authConfig, logger)
 }

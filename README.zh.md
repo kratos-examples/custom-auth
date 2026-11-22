@@ -13,6 +13,24 @@
 
 基于 Go-Kratos 框架构建的演示项目
 
+## 自定义认证演示
+
+此分叉组合 [kratos-static-auth v0.0.3](https://github.com/yylego/kratos-static-auth) 的角色令牌认证与 [kratos-custom-auth v0.0.3](https://github.com/yylego/kratos-custom-auth) 的数据库用户令牌认证。[changes/demo1.md](changes/demo1.md) 和 [changes/demo2.md](changes/demo2.md) 展示接入差异。
+
+第一层从 `Authorization` 读取各服务 `configs/config.yaml` 中的角色令牌，注入角色；第二层从 `AdminToken` 读取用户令牌，查询 PostgreSQL 并检查过期时间，注入管理员信息。新版 `WithMissingErk` 回调在缺少 `AdminToken` 时构造 `401 TOKEN_NOT_EXIST`，与未知令牌使用相同 reason，并通过 `FieldName()` 记录所缺字段。认证调试日志由 slog 级别控制。服务分别通过 `statickratosauth.FromContext` 和 `dbauth.GetAuthInfo` 读取两层身份。
+
+请使用演示用 PostgreSQL 数据库：服务启动会初始化 abc、xyz 两个账号，把示例令牌有效期刷新为 30 分钟；重复启动使用管理员的实际 ID。按后文构建并启动两个服务后，执行以下请求：
+
+```bash
+curl -i 'http://127.0.0.1:8001/students?page=1&page_size=1'
+curl -i 'http://127.0.0.1:8001/students?page=1&page_size=1' -H 'Authorization: 63a16b29e5bc4a28a880de1b2e707cc6'
+curl -i 'http://127.0.0.1:8001/students?page=1&page_size=1' -H 'Authorization: 63a16b29e5bc4a28a880de1b2e707cc6' -H 'AdminToken: invalid'
+curl -i 'http://127.0.0.1:8001/students?page=1&page_size=1' -H 'Authorization: 63a16b29e5bc4a28a880de1b2e707cc6' -H 'AdminToken: 95d9fda7f675444d9acc3c8225dbf7de'
+curl -i 'http://127.0.0.1:8002/articles?page=1&page_size=1' -H 'Authorization: c98235f2b2f746408f212976bdfae467' -H 'AdminToken: 46421ed7de4a4fcc888ff84541defbc3'
+```
+
+预期依次为 `401 UNAUTHORIZED`、`401 TOKEN_NOT_EXIST`、`401 TOKEN_NOT_EXIST`、`200`、`200`。两枚用户令牌分别对应 abc、xyz，两个服务的角色令牌不同；用户令牌过期时返回 `401 TOKEN_EXPIRED`。创建成功的响应会在 name/title 中显示 `(role=admin, user=abc)` 或所选身份，直接展示上下文注入。配置中的 admin、guest 均可通过认证范围内的操作，示例不区分二者的操作权限。原有 `ListStudentArticles` 操作保持在两层 INCLUDE 范围外，无需令牌。HTTP 和 gRPC 共用同一套中间件。
+
 ---
 
 <!-- TEMPLATE (ZH) BEGIN: LANGUAGE NAVIGATION -->

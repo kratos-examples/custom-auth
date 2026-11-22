@@ -26,7 +26,7 @@ func NewStudentService(uc *biz.StudentUsecase, logger *slog.Logger) *StudentServ
 func (s *StudentService) CreateStudent(ctx context.Context, req *pb.CreateStudentRequest) (*pb.CreateStudentReply, error) {
 	// Extract role name from config-based auth
 	// 从基于配置的认证中提取角色名
-	roleName, ok := statickratosauth.GetUsername(ctx)
+	roleName, ok := statickratosauth.FromContext(ctx)
 	must.True(ok)
 	must.Nice(roleName)
 	s.log.InfoContext(ctx, "CreateStudent", "roleName", roleName)

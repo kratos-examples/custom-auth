@@ -666,7 +666,7 @@ Code differences compared to source project.
  	}
 ```
 
-## internal/server/http.go (+75 -2)
+## internal/server/http.go (+77 -2)
 
 ```diff
 @@ -1,20 +1,34 @@
@@ -706,7 +706,7 @@ Code differences compared to source project.
  			validate.Validator(validateRequiredFields),
  		),
  	}
-@@ -30,4 +44,63 @@
+@@ -30,4 +44,65 @@
  	srv := http.NewServer(opts...)
  	pb.RegisterArticleServiceHTTPServer(srv, article)
  	return srv
@@ -720,8 +720,8 @@ Code differences compared to source project.
 +// Authorization: 来自配置文件的角色令牌（admin/guest）
 +// AdminToken: 来自数据库的用户令牌（具体哪个管理员）
 +/*
-+curl --location 'http://127.0.0.1:8002/v1/articles' --header 'Authorization: c98235f2b2f746408f212976bdfae467' --header 'AdminToken: 95d9fda7f675444d9acc3c8225dbf7de'
-+curl --location 'http://127.0.0.1:8002/v1/articles' --header 'Authorization: c98235f2b2f746408f212976bdfae467' --header 'AdminToken: 46421ed7de4a4fcc888ff84541defbc3'
++curl --location 'http://127.0.0.1:8002/articles?page=1&page_size=1' --header 'Authorization: c98235f2b2f746408f212976bdfae467' --header 'AdminToken: 95d9fda7f675444d9acc3c8225dbf7de'
++curl --location 'http://127.0.0.1:8002/articles?page=1&page_size=1' --header 'Authorization: c98235f2b2f746408f212976bdfae467' --header 'AdminToken: 46421ed7de4a4fcc888ff84541defbc3'
 +*/
 +
 +// NewRoleMiddleware creates auth middleware with token validation and route scope
@@ -741,8 +741,7 @@ Code differences compared to source project.
 +	}
 +	authConfig := statickratosauth.NewConfig(routeScope, authTokens).
 +		WithFieldName("Authorization").
-+		WithSimpleEnable().
-+		WithDebugMode(true)
++		WithSimpleEnable()
 +	return statickratosauth.NewMiddleware(authConfig, logger)
 +}
 +
@@ -766,8 +765,11 @@ Code differences compared to source project.
 +		return ctx, nil
 +	}
 +	authConfig := customkratosauth.NewConfig(routeScope, checkAuthFunction).
-+		WithFieldName("AdminToken").
-+		WithDebugMode(true)
++		WithFieldName("AdminToken")
++	authConfig.WithMissingErk(func(ctx context.Context) *errors.Error {
++		logger.InfoContext(ctx, "missing auth token", "field", authConfig.FieldName())
++		return errors.Unauthorized("TOKEN_NOT_EXIST", "token not exist")
++	})
 +	return customkratosauth.NewMiddleware(authConfig, logger)
  }
 ```
@@ -806,7 +808,7 @@ Code differences compared to source project.
  func (s *ArticleService) CreateArticle(ctx context.Context, req *pb.CreateArticleRequest) (*pb.CreateArticleReply, error) {
 +	// Extract role name from config-based auth
 +	// 从基于配置的认证中提取角色名
-+	roleName, ok := statickratosauth.GetUsername(ctx)
++	roleName, ok := statickratosauth.FromContext(ctx)
 +	must.True(ok)
 +	must.Nice(roleName)
 +	s.log.InfoContext(ctx, "CreateArticle", "roleName", roleName)

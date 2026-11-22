@@ -13,6 +13,24 @@
 
 Demo projects built with the Go-Kratos framework.
 
+## Custom authentication demo
+
+This fork combines [kratos-static-auth v0.0.3](https://github.com/yylego/kratos-static-auth) for a role token with [kratos-custom-auth v0.0.3](https://github.com/yylego/kratos-custom-auth) for a database-backed user token. The integration is shown in [changes/demo1.md](changes/demo1.md) and [changes/demo2.md](changes/demo2.md).
+
+The first stage reads `Authorization` from each service's `configs/config.yaml` and injects the role. The second reads `AdminToken`, checks the token and its expiration in PostgreSQL, and injects the admin account. `WithMissingErk` builds a `401 TOKEN_NOT_EXIST` response when `AdminToken` is absent, matching the reason for an unknown token; the callback logs `FieldName()`. Auth debug records follow the configured slog level. The service uses `statickratosauth.FromContext` and `dbauth.GetAuthInfo` to read both identities.
+
+Use a demo PostgreSQL database: startup seeds `abc` and `xyz`, refreshes their tokens to expire in 30 minutes, and reuses the actual admin IDs on restart. Follow the service build/run instructions below, then execute these requests:
+
+```bash
+curl -i 'http://127.0.0.1:8001/students?page=1&page_size=1'
+curl -i 'http://127.0.0.1:8001/students?page=1&page_size=1' -H 'Authorization: 63a16b29e5bc4a28a880de1b2e707cc6'
+curl -i 'http://127.0.0.1:8001/students?page=1&page_size=1' -H 'Authorization: 63a16b29e5bc4a28a880de1b2e707cc6' -H 'AdminToken: invalid'
+curl -i 'http://127.0.0.1:8001/students?page=1&page_size=1' -H 'Authorization: 63a16b29e5bc4a28a880de1b2e707cc6' -H 'AdminToken: 95d9fda7f675444d9acc3c8225dbf7de'
+curl -i 'http://127.0.0.1:8002/articles?page=1&page_size=1' -H 'Authorization: c98235f2b2f746408f212976bdfae467' -H 'AdminToken: 46421ed7de4a4fcc888ff84541defbc3'
+```
+
+Expected results, in order: `401 UNAUTHORIZED`, `401 TOKEN_NOT_EXIST`, `401 TOKEN_NOT_EXIST`, `200`, `200`. The user tokens select `abc` and `xyz`; the role tokens differ between services. An expired user token yields `401 TOKEN_EXPIRED`. Successful create responses show `(role=admin, user=abc)` or the selected identity in the name/title, making context injection visible. Both admin and guest roles pass the configured scope; this demo does not impose different permissions on them. The existing `ListStudentArticles` operation stays outside both INCLUDE scopes and needs no token. HTTP and gRPC share the same middleware.
+
 ---
 
 <!-- TEMPLATE (EN) BEGIN: LANGUAGE NAVIGATION -->
